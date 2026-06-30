@@ -2,7 +2,7 @@
 // 优质的 spring/boot/data/security/cloud 框架中文文档尽在 => https://springdoc.cn
 plugins {
     java
-    id("org.springframework.boot") version "4.1.0"
+    id("org.springframework.boot") version "3.5.4"
     id("io.spring.dependency-management") version "1.1.7"
 }
 
@@ -32,6 +32,11 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    implementation("io.minio:minio:8.5.10")
+    implementation("org.springframework.kafka:spring-kafka")
+    implementation("org.apache.pdfbox:pdfbox:3.0.3")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-web")
 }
 
 tasks.withType<Test> {
