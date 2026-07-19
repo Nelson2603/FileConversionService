@@ -29,9 +29,6 @@ public class IdempotencyService {
             return false;
         }
     }
-    @Transactional
-    public void rollback(String messageId){
-        inboxRepository.findByMessageId(messageId).ifPresent(inboxRepository::delete);
-        log.info("Rolled back processing for message: {}", messageId);
-    }
+
+
 }

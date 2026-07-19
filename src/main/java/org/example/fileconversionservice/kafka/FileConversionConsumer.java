@@ -1,17 +1,21 @@
 package org.example.fileconversionservice.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.fileconversionservice.converter.ConversionManager;
 
 import org.example.fileconversionservice.dto.FileConversionRequest;
 import org.example.fileconversionservice.dto.FileConversionResponse;
+import org.example.fileconversionservice.exception.ConversionException;
+import org.example.fileconversionservice.exception.StorageException;
 import org.example.fileconversionservice.service.IdempotencyService;
 import org.example.fileconversionservice.service.MinioService;
+import org.example.fileconversionservice.service.OutboxService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
+
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Paths;
@@ -25,7 +29,8 @@ public class FileConversionConsumer {
     private final MinioService minioService;
     private final ConversionManager conversionManager;
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final OutboxService outboxService;
+
 
     private final ObjectMapper objectMapper; // Для парсинга JSON
 
@@ -36,6 +41,8 @@ public class FileConversionConsumer {
      * Слушаем входящий топик Kafka
      */
     @KafkaListener(topics = "${app.kafka.input-topic}", groupId = "${spring.kafka.consumer.group-id}")
+    @Transactional
+
     public void listen(String message) {
         log.info("Received message from Kafka: {}", message);
 
@@ -50,19 +57,19 @@ public class FileConversionConsumer {
 
         // 1. ПРОВЕРКА ИДЕМПОТЕНТНОСТИ (Transactional Inbox)
         // Если такое сообщение уже было обработано, tryToAcquireLock вернет false
-        if (!idempotencyService.tryToAcquireLock(request.getMessageId())) {
-            log.warn("Duplicate message detected. Skipping processing for ID: {}", request.getMessageId());
+        if (!idempotencyService.tryToAcquireLock(request.messageId())) {
+            log.warn("Duplicate message detected. Skipping processing for ID: {}", request.messageId());
             return;
         }
 
         // 2. БИЗНЕС-ЛОГИКА
         try {
             // Получаем имя файла из пути (например, из "input/photo.png" берем "photo.png")
-            String fileName = Paths.get(request.getFilePath()).getFileName().toString();
+            String fileName = Paths.get(request.filePath()).getFileName().toString();
 
             // Скачиваем файл из MinIO
-            log.info("Downloading file: {}", request.getFilePath());
-            byte[] sourceData = minioService.downloadFile(request.getFilePath());
+            log.info("Downloading file: {}", request.filePath());
+            byte[] sourceData = minioService.downloadFile(request.filePath());
 
             // Конвертируем в PDF (тут сработает нужный Strategy: Image, Text или Zip)
             log.info("Converting file: {}", fileName);
@@ -72,27 +79,39 @@ public class FileConversionConsumer {
             log.info("Uploading converted PDF to MinIO");
             String newPath = minioService.uploadFile(pdfData, fileName, "application/pdf");
 
-            // 3. ОТПРАВКА РЕЗУЛЬТАТА (Producer)
+            // 3. СОХРАНЕНИЕ РЕЗУЛЬТАТА (АУТБОКС)
             FileConversionResponse response = new FileConversionResponse(
-                    request.getMessageId(), // Сохраняем тот же ID для связи запроса и ответа
+                    request.messageId(), // Сохраняем тот же ID для связи запроса и ответа
                     newPath
             );
 
             String jsonResponse = objectMapper.writeValueAsString(response);
-            kafkaTemplate.send(outputTopic, request.getMessageId(), jsonResponse);
+            outboxService.saveMessage(
+                    request.messageId(),
+                    jsonResponse,
+                    outputTopic
+            );
 
-            log.info("Successfully processed and sent result for message ID: {}", request.getMessageId());
+            log.info("Successfully processed and sent result for message ID: {}", request.messageId());
 
-        } catch (Exception e) {
+        } catch (StorageException e) {
+            log.error("Storage exception for message ID {}: {}", request.messageId(), e.getMessage());
+
+
+        } catch (ConversionException e) {
+
+            log.error("Conversion exception for message ID {}: {}", request.messageId(), e.getMessage());
+        }
+
+
+        catch(Exception e){
             // 4. ОБРАБОТКА ОШИБОК И ОТКАТ
-            log.error("Error during file conversion for message ID: {}", request.getMessageId(), e);
+            log.error("Error during file conversion for message ID: {}", request.messageId(), e);
 
-            // Удаляем запись из Inbox, чтобы Kafka могла попробовать обработать сообщение снова (Retry)
-            idempotencyService.rollback(request.getMessageId());
 
             // Пробрасываем исключение. Spring Kafka не отправит ACK,
             // и сообщение останется в топике для повторного получения.
-            throw new RuntimeException("Conversion failed", e);
+            throw new ConversionException("Conversion failed for message " + request.messageId(), e);
         }
     }
 }

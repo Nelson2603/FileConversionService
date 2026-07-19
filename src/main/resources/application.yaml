@@ -12,8 +12,6 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   jpa:
-    hibernate:
-      ddl-auto: update
     show-sql: true
     properties:
       hibernate:
@@ -40,3 +38,7 @@ app:
   kafka:
     input-topic: file-conversion-requests
     output-topic: file-conversion-responses
+
+    liquibase:
+      enabled: true
+      change-log: classpath:/db/changelog/db.changelog-master.yaml
