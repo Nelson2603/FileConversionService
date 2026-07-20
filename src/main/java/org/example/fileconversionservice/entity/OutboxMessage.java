@@ -36,11 +36,18 @@ public class OutboxMessage {
     @Column(nullable = false)
     private OutboxStatus status = OutboxStatus.PENDING;
 
+    @Column(nullable = false)
+    private int retryCount = 0;
+
+    @Column(nullable = true)
+    private String lastError;
+
     public OutboxMessage(String messageId, String payload, String topic) {
         this.messageId = messageId;
         this.payload = payload;
         this.topic = topic;
         this.createdAt = LocalDateTime.now();
         this.status = OutboxStatus.PENDING;
+        this.retryCount = 0;
     }
 }

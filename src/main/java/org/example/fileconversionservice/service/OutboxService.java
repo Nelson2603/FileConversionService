@@ -36,4 +36,22 @@ public class OutboxService {
     public List<OutboxMessage> getPendingMessages(){
         return outboxRepository.findByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING);
     }
+
+    @Transactional
+    public void incrementRetryCount(Long id, String errorMessage) {
+        OutboxMessage message = outboxRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Outbox message not found: " + id));
+        message.setRetryCount(message.getRetryCount() + 1);
+        message.setLastError(errorMessage);
+        outboxRepository.save(message);
+    }
+
+    @Transactional
+    public void markAsFailed(Long id, String errorMessage) {
+        OutboxMessage message = outboxRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Outbox message not found: " + id));
+        message.setStatus(OutboxStatus.FAILED);
+        message.setLastError(errorMessage);
+        outboxRepository.save(message);
+    }
 }
