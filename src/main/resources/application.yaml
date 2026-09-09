@@ -49,9 +49,17 @@ app:
     input-topic: file-conversion-requests
     output-topic: file-conversion-responses
 
+    flow-manager:
+      input-topic: to-convert
+      output-topic: converted
+
     liquibase:
       enabled: true
       change-log: classpath:/db/changelog/db.changelog-master.yaml
 
   outbox:
     max-retries: 10
+
+server:
+  port: 8083
+

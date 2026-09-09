@@ -18,7 +18,7 @@ import java.io.InputStream;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class MinioService {
+public class  MinioService {
 
     private final MinioClient minioClient;
 

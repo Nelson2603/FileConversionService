@@ -1,7 +1,6 @@
 package org.example.fileconversionservice.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
+
 
 
 

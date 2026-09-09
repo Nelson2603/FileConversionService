@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "inbox_messages")
 @Getter
+
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
